@@ -1,0 +1,86 @@
+version: '3.5'
+
+services:
+  mongodb:
+    image: mongo
+    container_name: mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - "mongodata:/data/db"
+    networks:
+      - db
+    restart: always
+    environment: 
+      MONGO_INITDB_ROOT_USERNAME: username
+      MONGO_INITDB_ROOT_PASSWORD: password
+
+  zookeeper:
+    image: wurstmeister/zookeeper
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    networks: 
+      - kafkanet
+  
+  kafka:
+    image: wurstmeister/kafka
+    container_name: kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_CREATE_TOPICS: "positions:1:1"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks: 
+      - kafkanet
+
+  rest-kafka:
+    image: paroar/rest-kafka
+    container_name: rest-kafka
+    restart: always
+    ports: 
+      - "8085:8085"
+    networks: 
+      - kafkanet
+    depends_on: 
+      - kafka
+    environment: 
+      PORT: 8085
+      KAFKA_SERVER: kafka:9092
+      KAFKA_TOPIC: positions
+
+  kafka-mongo:
+    image: paroar/kafka-mongo
+    container_name: kafka-mongo
+    restart: always
+    networks: 
+      - kafkanet
+      - db
+    depends_on:
+      - kafka
+      - mongodb
+    environment: 
+      KAFKA_SERVER: kafka:9092
+      KAFKA_TOPIC: positions
+      MONGO_HOST: mongodb:27017
+      MONGO_DB: db
+      MONGO_COLLECTION: positions
+      MONGO_USERNAME: username
+      MONGO_PASSWORD: password
+
+networks: 
+  kafkanet:
+    name: kafkanet
+  db:
+    name: db
+
+volumes:
+   mongodata:
